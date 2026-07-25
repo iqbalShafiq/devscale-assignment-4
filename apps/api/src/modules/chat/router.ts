@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { prisma } from "../../utils/prisma.js";
 import { createPrismaMemoryStore } from "@anvia/memory-prisma";
-import { createAgent, tracing } from "@assingment/agent";
+import {
+  createAgent,
+  createDataAnalysisTool,
+  tracing,
+} from "@assingment/agent";
 import { createEventStream } from "@anvia/server";
 
 function requireSessionId(value: unknown): string | null {
@@ -58,7 +62,7 @@ export const chatRouter = new Hono()
       agentId: "my-agent",
       tracing: tracing,
       additionalInstructions: [],
-      additionalTools: [],
+      additionalTools: createDataAnalysisTool(),
       memory: prismaMemory,
     });
 
