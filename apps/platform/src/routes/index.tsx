@@ -296,19 +296,10 @@ function ChatSession({
     }),
   });
 
-  useEffect(() => {
-    if (wasStreamingRef.current && chat.status !== "streaming") {
-      onStreamSettled();
-    }
-    wasStreamingRef.current = chat.status === "streaming";
-  }, [chat.status, onStreamSettled]);
-
-  useEffect(() => {
-    let cancelled = false;
+  const focusComposer = useCallback(() => {
     let attempts = 0;
 
-    const focusComposer = () => {
-      if (cancelled) return;
+    const tryFocus = () => {
       const editor = composerInputRef.current?.querySelector<HTMLElement>(
         "[data-anvia-composer-editor]",
       );
@@ -317,15 +308,24 @@ function ChatSession({
         return;
       }
       if (attempts++ < 20) {
-        requestAnimationFrame(focusComposer);
+        requestAnimationFrame(tryFocus);
       }
     };
 
-    focusComposer();
-    return () => {
-      cancelled = true;
-    };
+    tryFocus();
   }, []);
+
+  useEffect(() => {
+    if (wasStreamingRef.current && chat.status !== "streaming") {
+      onStreamSettled();
+      focusComposer();
+    }
+    wasStreamingRef.current = chat.status === "streaming";
+  }, [chat.status, focusComposer, onStreamSettled]);
+
+  useEffect(() => {
+    focusComposer();
+  }, [focusComposer]);
 
   return (
     <ChatProvider controller={chat}>
