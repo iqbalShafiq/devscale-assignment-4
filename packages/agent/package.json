@@ -1,11 +1,14 @@
 {
-  "name": "agent",
+  "name": "@assingment/agent",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "runner:dev": "pnpm with-env tsx ./src/runner-dev.ts",
     "with-env": "dotenv -e ../../.env -- "
+  },
+  "exports": {
+    ".": "./src/index.ts"
   },
   "keywords": [],
   "author": "",

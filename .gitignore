@@ -13,6 +13,15 @@ build/
 out/
 *.tsbuildinfo
 
+# Prisma (regenerate with: pnpm --filter api db:generate)
+apps/api/src/generated/
+
+# Vite
+.vite/
+
+# TanStack Router / Start
+.tanstack/
+
 # Logs
 logs/
 *.log
@@ -30,7 +39,15 @@ coverage/
 .turbo/
 .parcel-cache/
 .eslintcache
-*.tsbuildinfo
+.stylelintcache
+.prettiercache
+
+# Local AI agent skills (Prisma CLI installs; keep skills-lock.json)
+.agents/
+.claude/
+.windsurf/
+.cursor/skills/
+.cursor/skills-cursor/
 
 # OS
 .DS_Store
@@ -52,3 +69,5 @@ Desktop.ini
 *.local
 .tmp/
 temp/
+.vercel/
+.netlify/
