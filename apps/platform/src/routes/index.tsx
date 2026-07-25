@@ -2,8 +2,17 @@ import { initialMessagesFromMemory, useChat } from "@anvia/react";
 import type { UIMessage } from "@anvia/react";
 import { ChatProvider, Composer, Message, Thread } from "@anvia/react-ui";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, ChevronDown, Copy, Plus, RefreshCw, Square, ArrowUp } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  Copy,
+  Plus,
+  RefreshCw,
+  Square,
+} from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { MathMarkdown } from "#/components/math-markdown";
 
 const API_BASE = "http://localhost:3001";
 const SESSION_STORAGE_KEY = "chat.sessionId";
@@ -354,8 +363,8 @@ function ChatSession({
                       {(part) => {
                         if (part.type === "text") {
                           return (
-                            <Message.Part className="[&_a]:text-emerald-700 [&_a]:underline [&_code]:rounded [&_code]:bg-zinc-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p+p]:mt-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-zinc-900 [&_pre]:p-3 [&_pre]:text-zinc-100 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 group-data-[role=user]:[&_code]:bg-zinc-800 group-data-[role=user]:[&_a]:text-emerald-300">
-                              <Message.Markdown />
+                            <Message.Part className="[&_a]:text-emerald-700 [&_a]:underline [&_code]:rounded [&_code]:bg-zinc-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_li]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p+p]:mt-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-zinc-900 [&_pre]:p-3 [&_pre]:text-zinc-100 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_.katex-display]:my-3 [&_.katex]:text-[1.05em] group-data-[role=user]:[&_code]:bg-zinc-800 group-data-[role=user]:[&_a]:text-emerald-300">
+                              <MathMarkdown />
                             </Message.Part>
                           );
                         }
