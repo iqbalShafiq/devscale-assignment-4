@@ -1,26 +1,307 @@
 import { initialMessagesFromMemory, useChat } from "@anvia/react";
+import type { UIMessage } from "@anvia/react";
 import { ChatProvider, Composer, Message, Thread } from "@anvia/react-ui";
 import { createFileRoute } from "@tanstack/react-router";
-import { Copy, RefreshCw } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Check, ChevronDown, Copy, Plus, RefreshCw, Square, ArrowUp } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+
+const API_BASE = "http://localhost:3001";
+const SESSION_STORAGE_KEY = "chat.sessionId";
 
 export const Route = createFileRoute("/")({
   component: Home,
-  loader: async () => {
-    const response = await fetch("http://localhost:3001/api/chat");
-    const data = await response.json();
-    return data;
-  },
 });
 
+function createSessionId() {
+  return crypto.randomUUID();
+}
+
+function readStoredSessionId() {
+  try {
+    const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (stored && stored.trim().length > 0) return stored;
+  } catch {
+    // ignore storage access errors
+  }
+  return null;
+}
+
+function persistSessionId(sessionId: string) {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    // ignore storage access errors
+  }
+}
+
+function mergeSessionIds(sessionId: string, sessionIds: string[]) {
+  return [sessionId, ...sessionIds.filter((id) => id !== sessionId)];
+}
+
+function shortSessionId(sessionId: string) {
+  if (sessionId.length <= 12) return sessionId;
+  return `${sessionId.slice(0, 8)}…${sessionId.slice(-4)}`;
+}
+
 function Home() {
-  const messages = Route.useLoaderData();
+  const [sessionId, setSessionId] = useState(() => {
+    return readStoredSessionId() ?? createSessionId();
+  });
+  const [sessionIds, setSessionIds] = useState<string[]>([sessionId]);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(
+    null,
+  );
+
+  const refreshSessions = useCallback(async (activeSessionId: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/chat/sessions`);
+      if (!response.ok) throw new Error("Failed to load sessions");
+      const data = (await response.json()) as string[];
+      setSessionIds(mergeSessionIds(activeSessionId, data));
+    } catch {
+      setSessionIds((current) => mergeSessionIds(activeSessionId, current));
+    }
+  }, []);
+
+  useEffect(() => {
+    persistSessionId(sessionId);
+    let cancelled = false;
+
+    setInitialMessages(null);
+
+    void (async () => {
+      await refreshSessions(sessionId);
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/chat?sessionId=${encodeURIComponent(sessionId)}`,
+        );
+        if (!response.ok) throw new Error("Failed to load messages");
+        const data = await response.json();
+        if (!cancelled) {
+          setInitialMessages(initialMessagesFromMemory(data));
+        }
+      } catch {
+        if (!cancelled) {
+          setInitialMessages([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshSessions, sessionId]);
+
+  const handleSelectSession = (nextSessionId: string) => {
+    if (nextSessionId === sessionId) return;
+    setSessionId(nextSessionId);
+  };
+
+  const handleNewSession = () => {
+    const nextSessionId = createSessionId();
+    setSessionIds((current) => mergeSessionIds(nextSessionId, current));
+    setSessionId(nextSessionId);
+  };
+
+  return (
+    <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-zinc-50 text-zinc-900">
+      <header className="shrink-0 border-b border-zinc-200 bg-white/80 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4">
+          <h1 className="shrink-0 text-sm font-semibold tracking-tight text-zinc-900">
+            Chat
+          </h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <SessionDropdown
+              sessionId={sessionId}
+              sessionIds={sessionIds}
+              onSelect={handleSelectSession}
+            />
+            <button
+              type="button"
+              onClick={handleNewSession}
+              aria-label="New session"
+              title="New session"
+              className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.98]"
+            >
+              <Plus className="size-4" strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {initialMessages === null ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+          Loading session...
+        </div>
+      ) : (
+        <ChatSession
+          key={sessionId}
+          sessionId={sessionId}
+          initialMessages={initialMessages}
+          onStreamSettled={() => {
+            void refreshSessions(sessionId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SessionDropdown({
+  sessionId,
+  sessionIds,
+  onSelect,
+}: {
+  sessionId: string;
+  sessionIds: string[];
+  onSelect: (sessionId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+  const buttonId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative min-w-0">
+      <button
+        id={buttonId}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        onClick={() => setOpen((current) => !current)}
+        className="group inline-flex min-h-11 w-[min(100%,18rem)] cursor-pointer items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-left shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 focus-visible:border-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-600/20 focus-visible:outline-none active:scale-[0.99]"
+      >
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase">
+            Session
+          </span>
+          <span className="truncate font-mono text-xs font-medium text-zinc-800">
+            {shortSessionId(sessionId)}
+          </span>
+        </span>
+        <ChevronDown
+          className={`size-4 shrink-0 text-zinc-400 transition duration-200 group-hover:text-zinc-600 ${open ? "rotate-180" : ""}`}
+          strokeWidth={1.75}
+        />
+      </button>
+
+      {open ? (
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-labelledby={buttonId}
+          className="absolute top-[calc(100%+0.5rem)] right-0 z-20 w-[min(calc(100vw-2rem),22rem)] overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/95 shadow-[0_12px_40px_-12px_rgb(24_24_27/0.35)] backdrop-blur-md"
+        >
+          <div className="border-b border-zinc-100 px-3 py-2.5">
+            <p className="text-[11px] font-medium tracking-wide text-zinc-400 uppercase">
+              Sessions
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              {sessionIds.length} conversation
+              {sessionIds.length === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          <ul className="chat-scroll max-h-64 overflow-y-auto p-1.5">
+            {sessionIds.map((id) => {
+              const selected = id === sessionId;
+              return (
+                <li key={id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => {
+                      onSelect(id);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                      selected
+                        ? "bg-emerald-50 text-emerald-900"
+                        : "text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                  >
+                    <span
+                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
+                        selected
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : "border-zinc-200 bg-white text-transparent"
+                      }`}
+                    >
+                      <Check className="size-3" strokeWidth={2.5} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-mono text-xs font-medium">
+                        {id}
+                      </span>
+                      {selected ? (
+                        <span className="mt-0.5 block text-[11px] font-medium text-emerald-700">
+                          Current session
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ChatSession({
+  sessionId,
+  initialMessages,
+  onStreamSettled,
+}: {
+  sessionId: string;
+  initialMessages: UIMessage[];
+  onStreamSettled: () => void;
+}) {
   const composerInputRef = useRef<HTMLDivElement>(null);
+  const wasStreamingRef = useRef(false);
 
   const chat = useChat({
-    endpoint: "http://localhost:3001/api/chat",
-    initialMessages: initialMessagesFromMemory(messages),
+    endpoint: `${API_BASE}/api/chat`,
+    initialMessages,
+    createRequest: ({ coreMessages }) => ({
+      messages: coreMessages,
+      stream: true as const,
+      sessionId,
+    }),
   });
+
+  useEffect(() => {
+    if (wasStreamingRef.current && chat.status !== "streaming") {
+      onStreamSettled();
+    }
+    wasStreamingRef.current = chat.status === "streaming";
+  }, [chat.status, onStreamSettled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,19 +329,8 @@ function Home() {
 
   return (
     <ChatProvider controller={chat}>
-      <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-zinc-50 text-zinc-900">
-        <header className="shrink-0 border-b border-zinc-200 bg-white/80 px-4 py-3 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-3xl items-baseline justify-between gap-4">
-            <h1 className="text-sm font-semibold tracking-tight text-zinc-900">
-              Chat
-            </h1>
-            <p className="text-xs text-zinc-500">
-              {chat.status === "streaming" ? "Generating..." : "Ready"}
-            </p>
-          </div>
-        </header>
-
-        <Thread.Root className="mx-auto grid min-h-0 w-full max-w-3xl flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden">
+        <Thread.Root className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
           <Thread.Viewport
             className="chat-scroll min-h-0 overflow-y-auto overscroll-contain px-4 py-6"
             autoScroll
@@ -154,12 +424,20 @@ function Home() {
               placeholder="Message Anvia..."
             />
             {chat.status === "streaming" ? (
-              <Composer.Stop className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 active:scale-[0.98]">
-                Stop
+              <Composer.Stop
+                aria-label="Stop"
+                title="Stop"
+                className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-zinc-900 text-white transition hover:bg-zinc-800 active:scale-[0.98]"
+              >
+                <Square className="size-3.5 fill-current" strokeWidth={0} />
               </Composer.Stop>
             ) : (
-              <Composer.Submit className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-medium text-white transition hover:bg-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40">
-                Send
+              <Composer.Submit
+                aria-label="Send"
+                title="Send"
+                className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-emerald-700 text-white transition hover:bg-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowUp className="size-4" strokeWidth={2} />
               </Composer.Submit>
             )}
           </Composer.Root>
